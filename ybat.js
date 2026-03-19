@@ -157,7 +157,9 @@
         for (let className in currentBboxes) {
             currentBboxes[className].forEach(bbox => {
                 setFontStyles(context, bbox.marked)
-                context.fillText(className, zoomX(bbox.x), zoomY(bbox.y - 2))
+                //context.textAlign = "center"
+                context.textBaseline = "middle"
+                context.fillText(className, zoomX(bbox.x + bbox.width), zoomY(bbox.y + bbox.height/2))
 
                 setBBoxStyles(context, bbox.marked)
                 context.strokeRect(zoomX(bbox.x), zoomY(bbox.y), zoom(bbox.width), zoom(bbox.height))

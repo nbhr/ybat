@@ -1214,8 +1214,8 @@
                 event.preventDefault()
             }
 
-
-            if (key === 37) {
+            // left or a
+            if (key === 37 || key == 65) {
                 if (imageList.length > 1) {
                     imageList.options[imageListIndex].selected = false
 
@@ -1236,7 +1236,8 @@
                 event.preventDefault()
             }
 
-            if (key === 39) {
+            // right or s
+            if (key === 39 || key == 83) {
                 if (imageList.length > 1) {
                     imageList.options[imageListIndex].selected = false
 
@@ -1270,6 +1271,7 @@
                 event.preventDefault()
             }
 
+            // up
             if (key === 38) {
                 if (classList.length > 1) {
                     classList.options[classListIndex].selected = false
@@ -1289,6 +1291,7 @@
                 event.preventDefault()
             }
 
+            // down
             if (key === 40) {
                 if (classList.length > 1) {
                     classList.options[classListIndex].selected = false

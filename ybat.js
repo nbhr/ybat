@@ -1038,6 +1038,12 @@
                 zip.file(name.join("."), result.join("\n"))
             }
 
+            const classListElement = document.getElementById("classList");
+            const classNames = Array.from(classListElement.options)
+                .map((opt, i) => `  ${i}: ${opt.text}`)
+                .join("\n");
+            zip.file("00names.txt", classNames);
+
             zip.generateAsync({type: "blob"})
                 .then((blob) => {
                     saveAs(blob, "bboxes_yolo.zip")

@@ -1257,6 +1257,19 @@
                 event.preventDefault()
             }
 
+            // 数字キー 1-9 でクラス直接選択
+            if (key >= 49 && key <= 57) { // keyCode: 1=49, 2=50, ..., 9=57
+                const index = key - 49  // キー1 → index 0
+                    if (index < classList.length) {
+                        classList.options[classListIndex].selected = false
+                        classListIndex = index
+                        classList.options[classListIndex].selected = true
+                        classList.selectedIndex = classListIndex
+                        setCurrentClass()
+                    }
+                event.preventDefault()
+            }
+
             if (key === 38) {
                 if (classList.length > 1) {
                     classList.options[classListIndex].selected = false

@@ -1214,6 +1214,7 @@
                 event.preventDefault()
             }
 
+
             if (key === 37) {
                 if (imageList.length > 1) {
                     imageList.options[imageListIndex].selected = false

@@ -102,6 +102,7 @@
             listenKeyboard()
             listenImageSearch()
             listenAnnotationFilter()
+            listenConfirmNext()
             listenImageCrop()
         }
     }
@@ -293,6 +294,11 @@
                         storeNewBbox(movedWidth, movedHeight)
                     } else { // Bbox was moved or resized - update original data
                         updateBboxAfterTransform()
+
+                        // 実際に動かした/リサイズしたので確認済み扱いにする
+                        // (単なる選択クリックはこの分岐に入らない)
+                        currentBbox.bbox.confirmed = true
+                        refreshImageListFilter()
                     }
                 } else { // (un)Mark a bbox
                     setBboxMarkedState()
@@ -321,7 +327,8 @@
             width: movedWidth,
             height: movedHeight,
             marked: true,
-            class: currentClass
+            class: currentClass,
+            confirmed: true // 人が今まさに描いたBBOXなので確認済み扱い
         }
 
         if (typeof bboxes[currentImage.name] === "undefined") {
@@ -831,9 +838,16 @@
 
                     const extension = files[i].name.split(".").pop()
 
+                    // "..._auto.zip"のように"_auto"で終わるファイル名は
+                    // 03_annotation.py等による自動検出結果とみなし、中のBBOXは
+                    // confirmed: false(未確認)として読み込む。それ以外(通常の
+                    // bboxes_yolo.zipや個別txt出力、Restore等)は人による確定済み
+                    // データとみなしconfirmed: trueとする。
+                    const isAutoSource = /_auto\.[^./\\]+$/i.test(files[i].name)
+
                     reader.addEventListener("load", () => {
                         if (extension === "txt" || extension === "xml" || extension === "json") {
-                            storeBbox(files[i].name, reader.result)
+                            storeBbox(files[i].name, reader.result, isAutoSource)
                         } else {
                             const zip = new JSZip()
 
@@ -842,7 +856,7 @@
                                     for (let filename in result.files) {
                                         result.file(filename).async("string")
                                             .then((text) => {
-                                                storeBbox(filename, text)
+                                                storeBbox(filename, text, isAutoSource)
                                             })
                                     }
                                 })
@@ -863,7 +877,7 @@
         bboxes = {}
     }
 
-    const storeBbox = (filename, text) => {
+    const storeBbox = (filename, text, isAutoSource = false) => {
         let image = null
         let bbox = null
 
@@ -908,7 +922,8 @@
                                         width: Math.floor(width),
                                         height: Math.floor(height),
                                         marked: false,
-                                        class: className
+                                        class: className,
+                                        confirmed: !isAutoSource
                                     })
 
                                     break
@@ -943,7 +958,8 @@
                                         width: parseInt(bndBoxMaxX) - parseInt(bndBoxX),
                                         height: parseInt(bndBoxMaxY) - parseInt(bndBoxY),
                                         marked: false,
-                                        class: className
+                                        class: className,
+                                        confirmed: !isAutoSource
                                     })
 
                                     break
@@ -1003,7 +1019,8 @@
                             width: bboxWidth,
                             height: bboxHeight,
                             marked: false,
-                            class: className
+                            class: className,
+                            confirmed: !isAutoSource
                         })
 
                         break
@@ -1223,18 +1240,13 @@
                 event.preventDefault()
             }
 
-            // left or a
+            // left or a -- 単に前の画像へ(確認済みにはしない)
             if (key === 37 || key == 65) {
                 const filterOn = document.getElementById("filterUnannotated").checked
                 const nextIndex = findNextImageIndex(imageListIndex, -1, filterOn)
 
                 if (nextIndex !== null) {
-                    imageList.options[imageListIndex].selected = false
-                    imageListIndex = nextIndex
-                    imageList.options[imageListIndex].selected = true
-                    imageList.selectedIndex = imageListIndex
-
-                    setCurrentImage(images[imageList.options[imageListIndex].innerHTML])
+                    selectImageListIndex(nextIndex)
 
                     document.body.style.cursor = "default"
                 }
@@ -1242,21 +1254,23 @@
                 event.preventDefault()
             }
 
-            // right or s
+            // right or s -- 単に次の画像へ(確認済みにはしない)
             if (key === 39 || key == 83) {
                 const filterOn = document.getElementById("filterUnannotated").checked
                 const nextIndex = findNextImageIndex(imageListIndex, 1, filterOn)
 
                 if (nextIndex !== null) {
-                    imageList.options[imageListIndex].selected = false
-                    imageListIndex = nextIndex
-                    imageList.options[imageListIndex].selected = true
-                    imageList.selectedIndex = imageListIndex
-
-                    setCurrentImage(images[imageList.options[imageListIndex].innerHTML])
+                    selectImageListIndex(nextIndex)
 
                     document.body.style.cursor = "default"
                 }
+
+                event.preventDefault()
+            }
+
+            // Enter -- 現在の画像のBBOXを確認済みにしてから、次の未完了画像へ
+            if (key === 13) {
+                confirmAndAdvance()
 
                 event.preventDefault()
             }
@@ -1349,7 +1363,10 @@
         })
     }
 
-    // 画像1枚分のアノテーションが「揃っている」か(全クラス分bboxがあるか)を判定する。
+    // 画像1枚分が「レビュー完了」か -- 全クラス分bboxが揃っていて、かつその
+    // 全bboxが確認済み(confirmed)かどうかを判定する。bboxes_yolo_auto.zip
+    // (ファイル名が"..._auto.<ext>")から読み込んだBBOXはconfirmed: falseで
+    // 入ってくるので、人が確認するまでは「未完了」として扱われる。
     // classes はクラス名をキーにしたオブジェクトなので、同じ文字が2回出てくる
     // 答え(例:「初初」)ではクラス名が衝突し正しく判定できない -- これはYBAT側の
     // 既存の制約(bboxesもクラス名キーで保存される)によるもので、このフィルタ
@@ -1368,16 +1385,25 @@
         }
 
         for (let className in classes) {
-            if (typeof imageBboxes[className] === "undefined" || imageBboxes[className].length === 0) {
+            const classBboxes = imageBboxes[className]
+
+            if (typeof classBboxes === "undefined" || classBboxes.length === 0) {
                 return false
+            }
+
+            for (let i = 0; i < classBboxes.length; i++) {
+                if (classBboxes[i].confirmed !== true) {
+                    return false
+                }
             }
         }
 
         return true
     }
 
-    // フィルタON時、imageList上で未アノテーション画像だけを表示する(hidden属性で
-    // 非表示にするのみで、images/bboxesの中身やoptionそのものは変更しない)
+    // フィルタON時、imageList上で未完了(未アノテーション or 未確認)の画像だけを
+    // 表示する(hidden属性で非表示にするのみで、images/bboxesの中身やoptionその
+    // ものは変更しない)
     const refreshImageListFilter = () => {
         const imageList = document.getElementById("imageList")
         const filterOn = document.getElementById("filterUnannotated").checked
@@ -1412,6 +1438,18 @@
         return null
     }
 
+    // imageListの指定indexへ移動する(選択状態の更新・currentImageの切り替えまで)
+    const selectImageListIndex = (index) => {
+        const imageList = document.getElementById("imageList")
+
+        imageList.options[imageListIndex].selected = false
+        imageListIndex = index
+        imageList.options[imageListIndex].selected = true
+        imageList.selectedIndex = imageListIndex
+
+        setCurrentImage(images[imageList.options[imageListIndex].innerHTML])
+    }
+
     const listenAnnotationFilter = () => {
         document.getElementById("filterUnannotated").addEventListener("change", (event) => {
             refreshImageListFilter()
@@ -1427,15 +1465,46 @@
                     if (nextIndex === null) {
                         alert("すべての画像でアノテーションが完了しています。")
                     } else {
-                        imageList.options[imageListIndex].selected = false
-                        imageListIndex = nextIndex
-                        imageList.options[imageListIndex].selected = true
-                        imageList.selectedIndex = imageListIndex
-
-                        setCurrentImage(images[imageList.options[imageListIndex].innerHTML])
+                        selectImageListIndex(nextIndex)
                     }
                 }
             }
+        })
+    }
+
+    // 現在の画像のBBOXを全てconfirmed(確認済み)にしてから、まだレビューが
+    // 済んでいない(未アノテーション or 未確認のBBOXが残っている)次の画像へ移動する。
+    // 「次へ」(矢印キー/A,S)は確認済みにせず単に移動するだけなのに対し、こちらは
+    // 「このBBOXは正しいと確認した上で次へ」という操作になる。
+    const confirmAndAdvance = () => {
+        if (currentImage === null) {
+            return
+        }
+
+        const imageBboxes = bboxes[currentImage.name]
+
+        if (typeof imageBboxes !== "undefined") {
+            for (let className in imageBboxes) {
+                for (let i = 0; i < imageBboxes[className].length; i++) {
+                    imageBboxes[className][i].confirmed = true
+                }
+            }
+        }
+
+        refreshImageListFilter()
+
+        const nextIndex = findNextImageIndex(imageListIndex, 1, true)
+
+        if (nextIndex === null) {
+            alert("すべての画像でアノテーションが完了しています。")
+        } else {
+            selectImageListIndex(nextIndex)
+        }
+    }
+
+    const listenConfirmNext = () => {
+        document.getElementById("confirmNext").addEventListener("click", () => {
+            confirmAndAdvance()
         })
     }
 

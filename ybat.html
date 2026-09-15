@@ -27,10 +27,12 @@
 
                 <label for="filterUnannotated">
                     <input type="checkbox" id="filterUnannotated" name="filterUnannotated" />
-                    未アノテーションのみ表示
+                    未完了(未アノテーション・未確認)のみ表示
                 </label>
 
                 <label for="imageList"></label><select name="imageList" id="imageList" size="10" multiple></select>
+
+                <input type="button" name="confirmNext" id="confirmNext" value="確認して次へ" />
 
                 <div id="imageInformation"></div>
                 <hr />
@@ -90,9 +92,19 @@
                             Key DELETE - remove selected Bbox
                         </li>
                         <li>
-                            「未アノテーションのみ表示」チェック時は、一覧・
+                            「未完了のみ表示」チェック時は、一覧・
                             <span class="keycap">&#x2190;</span>/<span class="keycap">&#x2192;</span>
-                            とも未アノテーション画像のみを対象にする
+                            とも未完了(未アノテーション or 未確認)の画像のみを対象にする
+                        </li>
+                        <li>
+                            <span class="keycap">Enter</span> / 「確認して次へ」ボタン
+                            - この画像のBBOXを全て確認済みにしてから、次の未完了画像へ
+                            (単なる<span class="keycap">&#x2190;</span>/<span class="keycap">&#x2192;</span>移動は確認済みにしない)
+                        </li>
+                        <li>
+                            ファイル名が「..._auto.zip」等(例: bboxes_yolo_auto.zip)で
+                            終わるBBOXファイルは自動検出結果とみなし未確認として読み込む。
+                            それ以外(通常のbboxes_yolo.zip等)は確認済みとして読み込む
                         </li>
                     </ul>
 

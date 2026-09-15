@@ -25,6 +25,11 @@
                 <label for="imageSearch">Search:</label>
                 <input type="text" id="imageSearch" name="imageSearch" />
 
+                <label for="filterUnannotated">
+                    <input type="checkbox" id="filterUnannotated" name="filterUnannotated" />
+                    未アノテーションのみ表示
+                </label>
+
                 <label for="imageList"></label><select name="imageList" id="imageList" size="10" multiple></select>
 
                 <div id="imageInformation"></div>
@@ -83,6 +88,11 @@
                         </li>
                         <li>
                             Key DELETE - remove selected Bbox
+                        </li>
+                        <li>
+                            「未アノテーションのみ表示」チェック時は、一覧・
+                            <span class="keycap">&#x2190;</span>/<span class="keycap">&#x2192;</span>
+                            とも未アノテーション画像のみを対象にする
                         </li>
                     </ul>
 

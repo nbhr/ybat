@@ -101,6 +101,7 @@
             listenBboxRestore()
             listenKeyboard()
             listenImageSearch()
+            listenAnnotationFilter()
             listenImageCrop()
         }
     }
@@ -332,6 +333,8 @@
         }
 
         bboxes[currentImage.name][currentClass].push(bbox)
+
+        refreshImageListFilter()
 
         currentBbox = {
             bbox: bbox,
@@ -1008,6 +1011,8 @@
                 }
             }
         }
+
+        refreshImageListFilter()
     }
 
     const listenBboxSave = () => {
@@ -1192,6 +1197,8 @@
 
             if (item) {
                 bboxes = JSON.parse(item)
+
+                refreshImageListFilter()
             }
         })
     }
@@ -1208,6 +1215,8 @@
                     bboxes[currentImage.name][currentBbox.bbox.class].splice(currentBbox.index, 1)
                     currentBbox = null
 
+                    refreshImageListFilter()
+
                     document.body.style.cursor = "default"
                 }
 
@@ -1216,15 +1225,12 @@
 
             // left or a
             if (key === 37 || key == 65) {
-                if (imageList.length > 1) {
+                const filterOn = document.getElementById("filterUnannotated").checked
+                const nextIndex = findNextImageIndex(imageListIndex, -1, filterOn)
+
+                if (nextIndex !== null) {
                     imageList.options[imageListIndex].selected = false
-
-                    if (imageListIndex === 0) {
-                        imageListIndex = imageList.length - 1
-                    } else {
-                        imageListIndex--
-                    }
-
+                    imageListIndex = nextIndex
                     imageList.options[imageListIndex].selected = true
                     imageList.selectedIndex = imageListIndex
 
@@ -1238,15 +1244,12 @@
 
             // right or s
             if (key === 39 || key == 83) {
-                if (imageList.length > 1) {
+                const filterOn = document.getElementById("filterUnannotated").checked
+                const nextIndex = findNextImageIndex(imageListIndex, 1, filterOn)
+
+                if (nextIndex !== null) {
                     imageList.options[imageListIndex].selected = false
-
-                    if (imageListIndex === imageList.length - 1) {
-                        imageListIndex = 0
-                    } else {
-                        imageListIndex++
-                    }
-
+                    imageListIndex = nextIndex
                     imageList.options[imageListIndex].selected = true
                     imageList.selectedIndex = imageListIndex
 
@@ -1341,6 +1344,96 @@
                     setCurrentImage(images[imageName])
 
                     break
+                }
+            }
+        })
+    }
+
+    // 画像1枚分のアノテーションが「揃っている」か(全クラス分bboxがあるか)を判定する。
+    // classes はクラス名をキーにしたオブジェクトなので、同じ文字が2回出てくる
+    // 答え(例:「初初」)ではクラス名が衝突し正しく判定できない -- これはYBAT側の
+    // 既存の制約(bboxesもクラス名キーで保存される)によるもので、このフィルタ
+    // 機能固有の問題ではない。
+    const isImageFullyAnnotated = (imageName) => {
+        const totalClasses = Object.keys(classes).length
+
+        if (totalClasses === 0) {
+            return false
+        }
+
+        const imageBboxes = bboxes[imageName]
+
+        if (typeof imageBboxes === "undefined") {
+            return false
+        }
+
+        for (let className in classes) {
+            if (typeof imageBboxes[className] === "undefined" || imageBboxes[className].length === 0) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    // フィルタON時、imageList上で未アノテーション画像だけを表示する(hidden属性で
+    // 非表示にするのみで、images/bboxesの中身やoptionそのものは変更しない)
+    const refreshImageListFilter = () => {
+        const imageList = document.getElementById("imageList")
+        const filterOn = document.getElementById("filterUnannotated").checked
+
+        for (let i = 0; i < imageList.options.length; i++) {
+            const option = imageList.options[i]
+
+            option.hidden = filterOn === true && isImageFullyAnnotated(option.value) === true
+        }
+    }
+
+    // fromIndexから見てdirection方向(+1/-1)に、条件(requireUnannotated)を満たす
+    // 次のimageListの位置を巡回的に探す。見つからなければnull。
+    const findNextImageIndex = (fromIndex, direction, requireUnannotated) => {
+        const imageList = document.getElementById("imageList")
+        const total = imageList.length
+
+        if (total <= 1) {
+            return null
+        }
+
+        let index = fromIndex
+
+        for (let step = 0; step < total - 1; step++) {
+            index = (index + direction + total) % total
+
+            if (requireUnannotated === false || isImageFullyAnnotated(imageList.options[index].value) === false) {
+                return index
+            }
+        }
+
+        return null
+    }
+
+    const listenAnnotationFilter = () => {
+        document.getElementById("filterUnannotated").addEventListener("change", (event) => {
+            refreshImageListFilter()
+
+            const imageList = document.getElementById("imageList")
+
+            if (event.target.checked === true && imageList.options.length > 0) {
+                const current = imageList.options[imageListIndex]
+
+                if (typeof current !== "undefined" && current.hidden === true) {
+                    const nextIndex = findNextImageIndex(imageListIndex, 1, true)
+
+                    if (nextIndex === null) {
+                        alert("すべての画像でアノテーションが完了しています。")
+                    } else {
+                        imageList.options[imageListIndex].selected = false
+                        imageListIndex = nextIndex
+                        imageList.options[imageListIndex].selected = true
+                        imageList.selectedIndex = imageListIndex
+
+                        setCurrentImage(images[imageList.options[imageListIndex].innerHTML])
+                    }
                 }
             }
         })
